@@ -1,5 +1,6 @@
 use crate::{IconSource, TIError};
-use ksni::{menu::StandardItem, Handle, Icon};
+use ksni::blocking::TrayMethods;
+use ksni::{blocking::Handle, menu::StandardItem, Icon};
 use std::sync::{Arc, Mutex};
 
 enum TrayItem {
@@ -85,15 +86,14 @@ impl ksni::Tray for Tray {
 
 impl TrayItemLinux {
     pub fn new(title: &str, icon: IconSource) -> Result<Self, TIError> {
-        let svc = ksni::TrayService::new(Tray {
+        let tray_handle = Tray {
             title: title.to_string(),
             icon,
             actions: vec![],
             next_id: 0,
-        });
+        };
 
-        let handle = svc.handle();
-        svc.spawn();
+        let handle = tray_handle.spawn().unwrap();
 
         Ok(Self { tray: handle })
     }
