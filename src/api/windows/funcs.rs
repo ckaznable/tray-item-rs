@@ -4,15 +4,15 @@ use windows_sys::Win32::{
     Foundation::{GetLastError, HWND, LRESULT, POINT},
     System::LibraryLoader::GetModuleHandleW,
     UI::{
-        Shell::{NIF_MESSAGE, NIM_ADD, NIF_ICON},
+        Shell::{NIF_ICON, NIF_MESSAGE, NIM_ADD},
         WindowsAndMessaging::{
             CreatePopupMenu, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetCursorPos,
-            GetMenuItemID, GetMessageW, PostQuitMessage, RegisterClassW, SetForegroundWindow,
-            SetMenuInfo, TrackPopupMenu, TranslateMessage, CW_USEDEFAULT, MENUINFO,
-            MIM_APPLYTOSUBMENUS, MIM_STYLE, MNS_NOTIFYBYPOS, MSG, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
-            TPM_LEFTBUTTON, WM_LBUTTONUP, WM_MENUCOMMAND, WM_QUIT, WM_RBUTTONUP, WM_USER,
-            WNDCLASSW, WS_OVERLAPPEDWINDOW, WM_CREATE, HICON, IDI_APPLICATION, LoadIconW, 
-            RegisterWindowMessageW,
+            GetMenuItemID, GetMessageW, LoadIconW, PostQuitMessage, RegisterClassW,
+            RegisterWindowMessageW, SetForegroundWindow, SetMenuInfo, TrackPopupMenu,
+            TranslateMessage, CW_USEDEFAULT, HICON, IDI_APPLICATION, MENUINFO, MIM_APPLYTOSUBMENUS,
+            MIM_STYLE, MNS_NOTIFYBYPOS, MSG, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_LEFTBUTTON,
+            WM_CREATE, WM_LBUTTONUP, WM_MENUCOMMAND, WM_QUIT, WM_RBUTTONUP, WM_USER, WNDCLASSW,
+            WS_OVERLAPPEDWINDOW,
         },
     },
 };
@@ -22,7 +22,7 @@ use {super::*, crate::TIError};
 pub(crate) fn to_wstring(str: &str) -> Vec<u16> {
     OsStr::new(str)
         .encode_wide()
-        .chain(Some(0).into_iter())
+        .chain(Some(0))
         .collect::<Vec<_>>()
 }
 
@@ -85,15 +85,16 @@ pub(crate) unsafe extern "system" fn window_proc(
     }
 
     // If windows explorer restarts and we need to recreate the tray icon
-    if msg == U_TASKBAR_RESTART { 
+    if msg == U_TASKBAR_RESTART {
         let icon: HICON = unsafe {
-            let mut handle = LoadIconW(GetModuleHandleW(std::ptr::null()),
-                to_wstring("tray-default")
-                .as_ptr());
-            if handle == 0 {
-                handle = LoadIconW(0, IDI_APPLICATION);
+            let mut handle = LoadIconW(
+                GetModuleHandleW(std::ptr::null()),
+                to_wstring("tray-default").as_ptr(),
+            );
+            if handle.is_null() {
+                handle = LoadIconW(ptr::null_mut(), IDI_APPLICATION);
             }
-            if handle == 0 {
+            if handle.is_null() {
                 println!("Error setting icon from resource");
                 PostQuitMessage(0);
             }
@@ -121,7 +122,7 @@ pub(crate) unsafe extern "system" fn window_proc(
 
 pub(crate) unsafe fn init_window() -> Result<WindowInfo, TIError> {
     let hmodule = GetModuleHandleW(ptr::null());
-    if hmodule == 0 {
+    if hmodule.is_null() {
         return Err(get_win_os_error("Error getting module handle"));
     }
 
@@ -130,7 +131,7 @@ pub(crate) unsafe fn init_window() -> Result<WindowInfo, TIError> {
     let mut wnd = unsafe { mem::zeroed::<WNDCLASSW>() };
     wnd.lpfnWndProc = Some(window_proc);
     wnd.lpszClassName = class_name.as_ptr();
-    
+
     RegisterClassW(&wnd);
 
     let hwnd = CreateWindowExW(
@@ -142,23 +143,24 @@ pub(crate) unsafe fn init_window() -> Result<WindowInfo, TIError> {
         0,
         CW_USEDEFAULT,
         0,
-        0,
-        0,
-        0,
+        ptr::null_mut(),
+        ptr::null_mut(),
+        ptr::null_mut(),
         ptr::null(),
     );
-    if hwnd == 0 {
+    if hwnd.is_null() {
         return Err(get_win_os_error("Error creating window"));
     }
-    
+
     let icon: HICON = unsafe {
-        let mut handle = LoadIconW(GetModuleHandleW(std::ptr::null()), 
-            to_wstring("tray-default")
-            .as_ptr());
-        if handle == 0 {
-            handle = LoadIconW(0, IDI_APPLICATION);
+        let mut handle = LoadIconW(
+            GetModuleHandleW(std::ptr::null()),
+            to_wstring("tray-default").as_ptr(),
+        );
+        if handle.is_null() {
+            handle = LoadIconW(ptr::null_mut(), IDI_APPLICATION);
         }
-        if handle == 0 {
+        if handle.is_null() {
             return Err(get_win_os_error("Error setting icon from resource"));
         }
         handle as HICON
@@ -181,7 +183,7 @@ pub(crate) unsafe fn init_window() -> Result<WindowInfo, TIError> {
     info.fMask = MIM_APPLYTOSUBMENUS | MIM_STYLE;
     info.dwStyle = MNS_NOTIFYBYPOS;
     let hmenu = CreatePopupMenu();
-    if hmenu == 0 {
+    if hmenu.is_null() {
         return Err(get_win_os_error("Error creating popup menu"));
     }
     if SetMenuInfo(hmenu, &info) == 0 {
@@ -199,7 +201,7 @@ pub(crate) unsafe fn run_loop() {
     // Run message loop
     let mut msg = unsafe { mem::zeroed::<MSG>() };
     loop {
-        GetMessageW(&mut msg, 0, 0, 0);
+        GetMessageW(&mut msg, ptr::null_mut(), 0, 0);
         if msg.message == WM_QUIT {
             break;
         }

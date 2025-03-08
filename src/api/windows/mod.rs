@@ -30,7 +30,7 @@ use crate::{IconSource, TIError};
 use funcs::*;
 use structs::*;
 
-thread_local!(static WININFO_STASH: RefCell<Option<WindowsLoopData>> = RefCell::new(None));
+thread_local!(static WININFO_STASH: RefCell<Option<WindowsLoopData>> = const { RefCell::new(None) });
 
 type CallBackEntry = Option<Box<dyn Fn() + Send + 'static>>;
 
@@ -54,12 +54,11 @@ impl TrayItemWindows {
                     break;
                 }
 
-                padlock::mutex_lock(&entries_clone, |ents: &mut Vec<CallBackEntry>| match &ents
-                    [v.0 as usize]
-                {
-                    Some(f) => f(),
-                    None => (),
-                })
+                padlock::mutex_lock(&entries_clone, |ents: &mut Vec<CallBackEntry>| {
+                    if let Some(f) = &ents[v.0 as usize] {
+                        f()
+                    }
+                });
             }
         });
 
@@ -91,10 +90,7 @@ impl TrayItemWindows {
             run_loop();
         });
 
-        let info = match rx.recv().unwrap() {
-            Ok(i) => i,
-            Err(e) => return Err(e),
-        };
+        let info = rx.recv().unwrap()?;
 
         let w = Self {
             entries,
@@ -112,7 +108,7 @@ impl TrayItemWindows {
 
     pub fn set_icon(&self, icon: IconSource) -> Result<(), TIError> {
         match icon {
-            IconSource::Resource(icon_str) => return self.set_icon_from_resource(icon_str),
+            IconSource::Resource(icon_str) => self.set_icon_from_resource(icon_str),
             IconSource::RawIcon(raw_icon) => self._set_icon(raw_icon),
         }
     }
@@ -164,7 +160,6 @@ impl TrayItemWindows {
             }
         }
         Ok(())
-
     }
 
     pub fn add_menu_item<F>(&mut self, label: &str, cb: F) -> Result<(), TIError>
@@ -287,7 +282,7 @@ impl TrayItemWindows {
                 LR_DEFAULTCOLOR,
             );
 
-            if handle == 0 {
+            if handle.is_null() {
                 return Err(get_win_os_error("Error setting icon from resource"));
             }
 
